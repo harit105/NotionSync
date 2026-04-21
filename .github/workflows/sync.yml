@@ -32,9 +32,9 @@ jobs:
           DB_NAME: v6
           COLLECTION: OC-WI-14.01 Culture Transfer
           NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
-          NOTION_DB_ID: ${{ secrets.NOTION_DB_ID }}
+          NOTION_DATA_SOURCE_ID: ${{ secrets.NOTION_DATA_SOURCE_ID }}
         run: |
           test -n "$MONGO_URI" || (echo "Missing MONGO_URI secret" && exit 1)
           test -n "$NOTION_TOKEN" || (echo "Missing NOTION_TOKEN secret" && exit 1)
-          test -n "$NOTION_DB_ID" || (echo "Missing NOTION_DB_ID secret" && exit 1)
+          test -n "$NOTION_DATA_SOURCE_ID" || (echo "Missing NOTION_DATA_SOURCE_ID secret" && exit 1)
           python sync_script.py

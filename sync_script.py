@@ -9,7 +9,7 @@ from pymongo import MongoClient
 # Connection settings from environment
 MONGO_URI = os.environ["MONGO_URI"]
 NOTION_TOKEN = os.environ["NOTION_TOKEN"]
-NOTION_DB_ID = os.environ["NOTION_DB_ID"]
+NOTION_DATA_SOURCE_ID = os.environ.get("NOTION_DATA_SOURCE_ID", os.environ.get("NOTION_DB_ID", ""))
 DB_NAME = os.environ.get("DB_NAME", "v6")
 COLLECTION = os.environ.get("COLLECTION", "OC-WI-14.01 Culture Transfer")
 
@@ -27,8 +27,8 @@ mongo_client = MongoClient(MONGO_URI)
 notion = Client(auth=NOTION_TOKEN)
 
 
-def normalize_notion_database_id(value):
-    """Accept a raw Notion database id or a full Notion URL and return the id."""
+def normalize_notion_id(value):
+    """Accept a raw Notion id or full Notion URL and return canonical id."""
     value_str = str(value).strip()
 
     # Match plain 32-char ID or hyphenated UUID-like ID.
@@ -37,7 +37,7 @@ def normalize_notion_database_id(value):
         raw = direct_match.group(1).replace("-", "")
         return f"{raw[0:8]}-{raw[8:12]}-{raw[12:16]}-{raw[16:20]}-{raw[20:32]}"
 
-    raise RuntimeError("NOTION_DB_ID is not a valid Notion database id or URL")
+    raise RuntimeError("NOTION_DATA_SOURCE_ID is not a valid Notion id or URL")
 
 
 # Date parsers
@@ -70,17 +70,28 @@ def parse_date_inoculation(value):
     return None
 
 
-def validate_notion_schema():
-    database_id = normalize_notion_database_id(NOTION_DB_ID)
+def get_notion_parent_and_properties():
+    notion_id = normalize_notion_id(NOTION_DATA_SOURCE_ID)
 
+    # Prefer data source API for newer Notion structures.
     try:
-        db = notion.databases.retrieve(database_id=database_id)
+        data_source = notion.data_sources.retrieve(data_source_id=notion_id)
+        return {"data_source_id": notion_id}, data_source.get("properties", {})
+    except Exception:
+        pass
+
+    # Fallback to legacy database API for compatibility.
+    try:
+        db = notion.databases.retrieve(database_id=notion_id)
+        return {"database_id": notion_id}, db.get("properties", {})
     except APIResponseError as exc:
         raise RuntimeError(
-            "Could not access Notion database. Verify NOTION_DB_ID is correct and share the database with integration 'Symbrosia_Sync'."
+            "Could not access Notion data source/database. Verify NOTION_DATA_SOURCE_ID is correct and share it with integration 'Symbrosia_Sync'."
         ) from exc
 
-    notion_properties = db.get("properties", {})
+
+def validate_notion_schema():
+    notion_parent, notion_properties = get_notion_parent_and_properties()
 
     missing = []
     wrong_type = []
@@ -102,11 +113,12 @@ def validate_notion_schema():
         raise RuntimeError("Notion database schema validation failed - " + " | ".join(details))
 
     print("Notion schema validation passed")
+    return notion_parent
 
 
 # Main sync
 def main():
-    validate_notion_schema()
+    notion_parent = validate_notion_schema()
 
     # Only fetch documents not yet synced to Notion
     docs = list(
@@ -137,7 +149,7 @@ def main():
             continue
 
         notion.pages.create(
-            parent={"database_id": NOTION_DB_ID},
+            parent=notion_parent,
             properties={
                 "SourceBatchNum": {"title": [{"text": {"content": str(doc.get("SourceBatchNum", ""))}}]},
                 "BatchNum": {"rich_text": [{"text": {"content": str(doc.get("BatchNum", ""))}}]},
