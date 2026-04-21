@@ -1,11 +1,11 @@
-name: Sync MongoDB to Notion
+name: Notion MongoDB Sync
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
 on:
   schedule:
-    - cron: '*/30 * * * *'   # every 30 minutes (UTC)
+    - cron: '0 */6 * * *'   # every 6 hours (UTC)
   workflow_dispatch:         # allows manual trigger from GitHub UI
 
 jobs:
@@ -26,6 +26,14 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
+      - name: Connect to Tailscale
+        uses: tailscale/github-action@v2
+        with:
+          authkey: ${{ secrets.TAILSCALE_AUTHKEY }}
+
+      - name: Show Tailscale IP
+        run: tailscale ip -4
+
       - name: Run sync script
         env:
           MONGO_URI: ${{ secrets.MONGO_URI }}
@@ -34,6 +42,7 @@ jobs:
           NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
           NOTION_DATA_SOURCE_ID: ${{ secrets.NOTION_DATA_SOURCE_ID }}
         run: |
+          test -n "${{ secrets.TAILSCALE_AUTHKEY }}" || (echo "Missing TAILSCALE_AUTHKEY secret" && exit 1)
           test -n "$MONGO_URI" || (echo "Missing MONGO_URI secret" && exit 1)
           test -n "$NOTION_TOKEN" || (echo "Missing NOTION_TOKEN secret" && exit 1)
           test -n "$NOTION_DATA_SOURCE_ID" || (echo "Missing NOTION_DATA_SOURCE_ID secret" && exit 1)
