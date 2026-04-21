@@ -1,0 +1,3 @@
+pymongo
+notion-client
+dnspython
