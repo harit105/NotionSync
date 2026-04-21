@@ -1,5 +1,8 @@
 name: Sync MongoDB to Notion
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
 on:
   schedule:
     - cron: '*/30 * * * *'   # every 30 minutes (UTC)
@@ -30,4 +33,8 @@ jobs:
           COLLECTION: OC-WI-14.01 Culture Transfer
           NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
           NOTION_DB_ID: ${{ secrets.NOTION_DB_ID }}
-        run: python sync_script.py
+        run: |
+          test -n "$MONGO_URI" || (echo "Missing MONGO_URI secret" && exit 1)
+          test -n "$NOTION_TOKEN" || (echo "Missing NOTION_TOKEN secret" && exit 1)
+          test -n "$NOTION_DB_ID" || (echo "Missing NOTION_DB_ID secret" && exit 1)
+          python sync_script.py
