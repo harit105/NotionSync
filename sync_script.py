@@ -3,6 +3,7 @@ import re
 from datetime import date, datetime
 
 from notion_client import Client
+from notion_client.errors import APIResponseError
 from pymongo import MongoClient
 
 # Connection settings from environment
@@ -24,6 +25,19 @@ REQUIRED_NOTION_PROPERTIES = {
 # Clients
 mongo_client = MongoClient(MONGO_URI)
 notion = Client(auth=NOTION_TOKEN)
+
+
+def normalize_notion_database_id(value):
+    """Accept a raw Notion database id or a full Notion URL and return the id."""
+    value_str = str(value).strip()
+
+    # Match plain 32-char ID or hyphenated UUID-like ID.
+    direct_match = re.search(r"([0-9a-fA-F]{32}|[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})", value_str)
+    if direct_match:
+        raw = direct_match.group(1).replace("-", "")
+        return f"{raw[0:8]}-{raw[8:12]}-{raw[12:16]}-{raw[16:20]}-{raw[20:32]}"
+
+    raise RuntimeError("NOTION_DB_ID is not a valid Notion database id or URL")
 
 
 # Date parsers
@@ -57,7 +71,15 @@ def parse_date_inoculation(value):
 
 
 def validate_notion_schema():
-    db = notion.databases.retrieve(database_id=NOTION_DB_ID)
+    database_id = normalize_notion_database_id(NOTION_DB_ID)
+
+    try:
+        db = notion.databases.retrieve(database_id=database_id)
+    except APIResponseError as exc:
+        raise RuntimeError(
+            "Could not access Notion database. Verify NOTION_DB_ID is correct and share the database with integration 'Symbrosia_Sync'."
+        ) from exc
+
     notion_properties = db.get("properties", {})
 
     missing = []
